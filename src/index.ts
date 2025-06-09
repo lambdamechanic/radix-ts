@@ -344,3 +344,43 @@ function buildQueryFilter(query?: Query) {
     isBranch: boolean,
   ) => Awaitable<boolean>;
 }
+
+class MemoryStore implements IStore {
+  private store = new Map<string, JValue>();
+
+  async get<T extends JValue>(key: string) {
+    return this.store.get(key) as T | undefined;
+  }
+
+  async set<T extends JValue>(key: string, value: T) {
+    this.store.set(key, value);
+  }
+
+  async del(key: string) {
+    this.store.delete(key);
+  }
+}
+
+export type TrieNode = Radix<MemoryStore>;
+
+export async function buildTrie(words: Iterable<string>): Promise<TrieNode> {
+  const trie = new Radix(new MemoryStore());
+  for (const w of words) {
+    await trie.set(w, w);
+  }
+  return trie;
+}
+
+export async function* intersectAll(
+  hay: Radix,
+  needle: Radix,
+): AsyncGenerator<[string, JValue], void, unknown> {
+  const emitted = new Set<string>();
+  for await (const [prefix] of needle.loop()) {
+    for await (const [key, value] of hay.loop({ prefix })) {
+      if (emitted.has(key)) continue;
+      emitted.add(key);
+      yield [key, value];
+    }
+  }
+}
